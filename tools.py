@@ -1,51 +1,40 @@
-import os
-import dotenv
+import os, re
 
-dotenv.load_dotenv()
-
-import requests
-import re
 from crewai.tools import tool
+from firecrawl import FirecrawlApp, ScrapeOptions
 
 
 @tool
 def web_search_tool(query: str):
-    url = "https://api.firecrawl.dev/v2/search"
-    api_key = os.getenv("FIRECRAWL_API_KEY")
+    """
+    Web Search Tool.
+    Args:
+        query: str
+            The query to search the web for.
+    Returns
+        A list of search results with the website content in Markdown format.
+    """
+    app = FirecrawlApp(api_key=os.getenv("FIRECRAWL_API_KEY"))
 
-    payload = {
-        "query": query,
-        "sources": [
-            "web",
-        ],
-        "limit": 3,
-        "scrapeOptions": {
-            "formats": [
-                "markdown",
-            ],
-        },
-    }
+    response = app.search(
+        query=query,
+        limit=5,
+        scrape_options=ScrapeOptions(
+            formats=["markdown"],
+        ),
+    )
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    response = requests.post(url, json=payload, headers=headers)
-    response = response.json()
-
-    # print(response.json())
-    if not response["success"]:
+    if not response.success:
         return "Error using tool."
 
     cleaned_chunks = []
 
-    for result in response.get("data", {}).get("web", []):
-        title = result.get("title", "")
-        url = result.get("url", "")
-        markdown = result.get("markdown", "")
+    for result in response.data:
 
-        # markdown 결과에 \n 많음 -> 이후에 토큰을 잡아먹음 -> 정규식으로 정리
+        title = result["title"]
+        url = result["url"]
+        markdown = result["markdown"]
+
         cleaned = re.sub(r"\\+|\n+", "", markdown).strip()
         cleaned = re.sub(r"\[[^\]]+\]\([^\)]+\)|https?://[^\s]+", "", cleaned)
 
@@ -58,6 +47,3 @@ def web_search_tool(query: str):
         cleaned_chunks.append(cleaned_result)
 
     return cleaned_chunks
-
-
-# print(web_search_tool("React Jobs in Korea"))
